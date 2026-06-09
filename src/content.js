@@ -65,7 +65,7 @@
   }
 
   /** Wait until predicate returns a truthy value, or reject on timeout. */
-  function waitFor(predicate, { timeout = 5000, interval = 80 } = {}) {
+  function waitFor(predicate, { timeout = 5000, interval = 80, label = "" } = {}) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
       (function poll() {
@@ -77,7 +77,9 @@
         }
         if (result) return resolve(result);
         if (Date.now() - start > timeout) {
-          return reject(new Error("waitFor timed out"));
+          return reject(
+            new Error("waitFor timed out" + (label ? ": " + label : ""))
+          );
         }
         setTimeout(poll, interval);
       })();
@@ -158,9 +160,58 @@
     return null;
   }
 
-  function findByText(selector, text) {
+  /** Element is rendered with real size on screen (not a hidden/stale node). */
+  function isVisible(el) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const style = getComputedStyle(el);
+    return style.visibility !== "hidden" && style.display !== "none";
+  }
+
+  /**
+   * Gmail's menu items / buttons respond to the full pointer+mouse sequence,
+   * not a bare click(). Dispatch at the element's on-screen centre so event
+   * delegation and hit-testing both see a real target.
+   */
+  function realClick(el) {
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const base = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: cx,
+      clientY: cy,
+      button: 0,
+    };
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+      const Ctor = type.startsWith("pointer") && window.PointerEvent ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new Ctor(type, base));
+    }
+  }
+
+  /**
+   * Return every visible element matching selector whose text contains `text`.
+   * Used to disambiguate Gmail's many duplicate/stale menu nodes.
+   */
+  function visibleMatches(selector, text, root = document) {
     const target = text.toLowerCase();
-    for (const el of document.querySelectorAll(selector)) {
+    const out = [];
+    for (const el of root.querySelectorAll(selector)) {
+      const txt = normalizedText(el);
+      if (txt === target || txt.includes(target)) {
+        if (isVisible(el)) out.push(el);
+      }
+    }
+    return out;
+  }
+
+  function findByText(selector, text, root = document) {
+    const target = text.toLowerCase();
+    for (const el of root.querySelectorAll(selector)) {
+      if (!isVisible(el)) continue; // skip hidden/stale nodes
       if (normalizedText(el) === target || normalizedText(el).includes(target)) {
         return el;
       }
@@ -181,36 +232,109 @@
    * the scheduling dialog open so the user can finish manually.
    */
   async function scheduleForNextDay(sendBtn) {
+    // The compose window is itself a [role="dialog"]. Capture it so we never
+    // mistake it for the schedule picker and type the date/time into its
+    // To/Subject fields.
+    const composeDialog = sendBtn.closest('[role="dialog"]') || null;
+
     const arrow = findMoreSendOptions(sendBtn);
     if (!arrow) throw new Error("Could not find the schedule-send dropdown");
-    arrow.click();
+    realClick(arrow);
 
-    const scheduleItem = await waitFor(() =>
-      findByText('[role="menuitem"]', "schedule send")
+    // Gmail keeps several stale/hidden "Schedule send" nodes in the DOM. Wait
+    // for at least one that is actually visible on screen (i.e. in the menu the
+    // arrow just opened), then click the one that is genuinely hit-testable.
+    const candidates = await waitFor(
+      () => {
+        const m = visibleMatches('[role="menuitem"]', "schedule send");
+        return m.length ? m : null;
+      },
+      { label: "schedule-send menuitem" }
     );
-    scheduleItem.click();
+    // Prefer the candidate whose centre actually hit-tests to itself (the one
+    // really on top / clickable), else fall back to the last match.
+    let scheduleItem = candidates[candidates.length - 1];
+    for (const el of candidates) {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (hit && (hit === el || el.contains(hit) || hit.contains(el))) {
+        scheduleItem = el;
+        break;
+      }
+    }
+    // Snapshot the dialogs that already exist so we can detect the NEW picker
+    // dialog that opening "Schedule send" creates.
+    const before = new Set(document.querySelectorAll('[role="dialog"]'));
+    realClick(scheduleItem);
 
-    // Some Gmail variants jump straight to a presets dialog with a
-    // "Pick date & time" entry; click through to the custom picker.
-    try {
-      const pick = await waitFor(
-        () => findByText('[role="button"], button, span', "pick date & time"),
-        { timeout: 1500 }
-      );
-      pick.click();
-    } catch (_) {
-      /* Custom picker may already be visible. */
+    // Wait for the schedule picker — a dialog that did not exist before.
+    const picker = await waitFor(
+      () => {
+        for (const dlg of document.querySelectorAll('[role="dialog"]')) {
+          if (dlg === composeDialog || before.has(dlg)) continue;
+          return dlg;
+        }
+        return null;
+      },
+      { label: "new picker dialog" }
+    );
+
+    // Preferred path: click Gmail's built-in "Tomorrow morning" preset, which
+    // schedules tomorrow at 8:00 AM and matches the default schedule time. This
+    // avoids typing into date/time fields entirely — the source of the bug
+    // where text leaked into the compose Subject. The picker content can load
+    // a beat after the dialog appears, so poll for it.
+    if (SCHEDULE_HOUR === 8 && SCHEDULE_MINUTE === 0) {
+      try {
+        const preset = await waitFor(
+          () =>
+            findByText(
+              '[role="menuitem"], [role="button"], [role="option"], li',
+              "tomorrow morning",
+              picker
+            ),
+          { timeout: 2500, label: "tomorrow-morning preset" }
+        );
+        realClick(preset);
+        return;
+      } catch (_) {
+        console.warn(
+          "[Sabbath Reminder] no 'tomorrow morning' preset; picker text:",
+          normalizedText(picker).slice(0, 200)
+        );
+      }
     }
 
-    const dialog = await waitFor(() => {
-      const dlgs = document.querySelectorAll('[role="dialog"]');
-      return dlgs.length ? dlgs[dlgs.length - 1] : null;
-    });
+    // Fallback: open Gmail's custom date & time picker.
+    const pick = findByText(
+      '[role="button"], button, span',
+      "pick date & time",
+      picker
+    );
+    if (pick) realClick(pick);
 
-    const inputs = await waitFor(() => {
-      const found = dialog.querySelectorAll('input[type="text"], input:not([type])');
-      return found.length >= 2 ? found : null;
-    });
+    // Find the custom-picker dialog (again, never the compose window) by
+    // requiring it to contain BOTH an aria-labelled date and time input. If we
+    // can't positively identify them, abort and let the user finish manually
+    // rather than risk editing the email.
+    const customDialog = await waitFor(
+      () => {
+        for (const dlg of document.querySelectorAll('[role="dialog"]')) {
+          if (dlg === composeDialog) continue;
+          const hasDate = dlg.querySelector('input[aria-label*="ate" i]');
+          const hasTime = dlg.querySelector('input[aria-label*="ime" i]');
+          if (hasDate && hasTime) return dlg;
+        }
+        return null;
+      },
+      { label: "custom date/time dialog" }
+    );
+
+    const dateInput = customDialog.querySelector('input[aria-label*="ate" i]');
+    const timeInput = customDialog.querySelector('input[aria-label*="ime" i]');
+    if (!dateInput || !timeInput) {
+      throw new Error("Could not identify the date/time fields");
+    }
 
     const target = nextDayAtScheduleTime();
     const dateStr = target.toLocaleDateString(undefined, {
@@ -223,32 +347,21 @@
       minute: "2-digit",
     });
 
-    // Identify date vs time inputs by aria-label when possible.
-    let dateInput = null;
-    let timeInput = null;
-    for (const input of inputs) {
-      const label = (input.getAttribute("aria-label") || "").toLowerCase();
-      if (label.includes("date")) dateInput = input;
-      if (label.includes("time")) timeInput = input;
-    }
-    if (!dateInput || !timeInput) {
-      dateInput = dateInput || inputs[0];
-      timeInput = timeInput || inputs[1];
-    }
-
     setNativeInputValue(dateInput, dateStr);
     setNativeInputValue(timeInput, timeStr);
     dateInput.dispatchEvent(new Event("blur", { bubbles: true }));
     timeInput.dispatchEvent(new Event("blur", { bubbles: true }));
 
-    const confirm = await waitFor(() => {
-      const scope = dialog;
-      for (const el of scope.querySelectorAll('[role="button"], button')) {
-        if (normalizedText(el).includes("schedule send")) return el;
-      }
-      return null;
-    });
-    confirm.click();
+    const confirm = await waitFor(
+      () => {
+        for (const el of customDialog.querySelectorAll('[role="button"], button')) {
+          if (normalizedText(el).includes("schedule send")) return el;
+        }
+        return null;
+      },
+      { label: "confirm schedule-send button" }
+    );
+    realClick(confirm);
   }
 
   // ----- Modal ---------------------------------------------------------------
