@@ -2,8 +2,8 @@
  * Sabbath Reminder — Gmail content script.
  *
  * Behaviour:
- *   - Only acts when the logged-in account belongs to the configured domain
- *     (acts2.network) AND today is Monday ("e-sabbath").
+ *   - Acts on Monday ("e-sabbath"). The extension is intended to be installed
+ *     only for the relevant org, so it does not gate on the account domain.
  *   - Intercepts the Gmail "Send" action (button click and Ctrl/Cmd+Enter).
  *   - Shows a modal offering three choices:
  *       1. Send anyway
@@ -15,7 +15,6 @@
 
   // ----- Configuration -------------------------------------------------------
 
-  const SABBATH_DOMAIN = "acts2.network";
   // 0 = Sunday, 1 = Monday, ... 6 = Saturday.
   const SABBATH_DAY = 1; // Monday
   // When scheduling for "the next day", send at this local time.
@@ -26,42 +25,6 @@
 
   function isSabbathToday() {
     return new Date().getDay() === SABBATH_DAY;
-  }
-
-  /**
-   * Best-effort detection of the currently active Gmail account address.
-   * Tries several sources because Gmail's DOM changes frequently.
-   */
-  function getActiveAccountEmail() {
-    const emailRe = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
-
-    // 1. The document title is usually "<folder> - <email> - Gmail".
-    const titleMatch = document.title && document.title.match(emailRe);
-    if (titleMatch) return titleMatch[0].toLowerCase();
-
-    // 2. The account switcher button exposes "Google Account: Name (email)".
-    const accountBtn = document.querySelector(
-      'a[aria-label*="Google Account"], [aria-label*="Google Account"]'
-    );
-    if (accountBtn) {
-      const label = accountBtn.getAttribute("aria-label") || "";
-      const m = label.match(emailRe);
-      if (m) return m[0].toLowerCase();
-    }
-
-    // 3. Any element whose title looks like an email (profile photo, etc.).
-    const titled = document.querySelector('[title*="@"]');
-    if (titled) {
-      const m = (titled.getAttribute("title") || "").match(emailRe);
-      if (m) return m[0].toLowerCase();
-    }
-
-    return null;
-  }
-
-  function isSabbathAccount() {
-    const email = getActiveAccountEmail();
-    return !!email && email.endsWith("@" + SABBATH_DOMAIN.toLowerCase());
   }
 
   /** Wait until predicate returns a truthy value, or reject on timeout. */
@@ -476,7 +439,7 @@
       return;
     }
     if (modalOpen) return;
-    if (!isSabbathToday() || !isSabbathAccount()) return;
+    if (!isSabbathToday()) return;
 
     const sendBtn = findSendButtonFrom(e.target);
     if (!sendBtn) return;
@@ -492,7 +455,7 @@
     const isSendShortcut =
       (e.ctrlKey || e.metaKey) && (e.key === "Enter" || e.keyCode === 13);
     if (!isSendShortcut) return;
-    if (!isSabbathToday() || !isSabbathAccount()) return;
+    if (!isSabbathToday()) return;
 
     const compose = e.target.closest && e.target.closest('[role="dialog"]');
     const sendBtn = findSendButtonIn(compose || document);

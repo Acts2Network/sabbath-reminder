@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sabbath Reminder",
   "version": "1.0.0",
-  "description": "Reminds acts2.network Gmail users that Monday is e-sabbath before sending email, with the option to schedule for the next day.",
+  "description": "Reminds you that Monday is e-sabbath before sending Gmail, with the option to schedule for the next day.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

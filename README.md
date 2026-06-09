@@ -1,17 +1,12 @@
 # Sabbath Reminder
 
-A Chrome extension that reminds **acts2.network** Gmail users that **Monday is
-e-sabbath** before they send an email.
+A Chrome extension that reminds you that **Monday is e-sabbath** before you send
+an email in Gmail.
 
 ## What it does
 
 When you click **Send** (or press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd>)
-in Gmail, the extension checks two things:
-
-1. Is today **Monday** (the e-sabbath)?
-2. Is the active Gmail account on the **`acts2.network`** domain?
-
-If both are true, sending is paused and a dialog appears:
+in Gmail on a **Monday** (the e-sabbath), sending is paused and a dialog appears:
 
 ![Sabbath Reminder modal](docs/screenshot.png)
 
@@ -22,8 +17,8 @@ You can choose:
   email tomorrow at 8:00 AM (local time).
 - **Cancel** — does nothing; the email stays in the compose window.
 
-On any other day, or for accounts outside `acts2.network`, the extension stays
-completely out of the way.
+On any other day the extension stays completely out of the way. It applies to
+every account in the browser, so install it only where the reminder is wanted.
 
 ## Install (load unpacked)
 
@@ -43,8 +38,7 @@ Chrome has no build step for this extension — it loads the source directly.
 5. Open [Gmail](https://mail.google.com). If you're not already on it, reload
    the tab so the extension loads.
 
-The reminder appears when you send mail on a **Monday** from an
-**`acts2.network`** account.
+The reminder appears whenever you send mail on a **Monday**.
 
 ### Updating
 
@@ -63,12 +57,11 @@ After pulling new changes (`git pull`), go to `chrome://extensions`, click the
 
 The defaults live at the top of [`src/content.js`](src/content.js):
 
-| Constant          | Default          | Meaning                                    |
-| ----------------- | ---------------- | ------------------------------------------ |
-| `SABBATH_DOMAIN`  | `acts2.network`  | Only accounts on this domain are reminded. |
-| `SABBATH_DAY`     | `1` (Monday)     | Day of week for the e-sabbath (0 = Sun).   |
-| `SCHEDULE_HOUR`   | `8`              | Hour to schedule "tomorrow" sends.         |
-| `SCHEDULE_MINUTE` | `0`              | Minute to schedule "tomorrow" sends.       |
+| Constant          | Default          | Meaning                                  |
+| ----------------- | ---------------- | ---------------------------------------- |
+| `SABBATH_DAY`     | `1` (Monday)     | Day of week for the e-sabbath (0 = Sun). |
+| `SCHEDULE_HOUR`   | `8`              | Hour to schedule "tomorrow" sends.       |
+| `SCHEDULE_MINUTE` | `0`              | Minute to schedule "tomorrow" sends.     |
 
 ## Files
 
@@ -85,5 +78,5 @@ icons/             # extension icons
   dialog through the DOM. Gmail's markup changes frequently; if auto-scheduling
   fails, the extension leaves the scheduling dialog open and shows a toast so
   you can pick a time manually.
-- The active account is detected from the page title / account switcher. If you
-  use multiple accounts in one window, make sure the correct account is active.
+- The reminder fires for **every** Gmail account in the browser. Install it only
+  where the e-sabbath reminder is wanted.
