@@ -27,11 +27,37 @@ completely out of the way.
 
 ## Install (load unpacked)
 
-1. Open `chrome://extensions` in Chrome.
-2. Turn on **Developer mode** (top-right).
-3. Click **Load unpacked** and select this repository's folder.
-4. Open [Gmail](https://mail.google.com) and try sending an email on a Monday
-   from an `acts2.network` account.
+Chrome has no build step for this extension — it loads the source directly.
+
+1. **Get the code.** Clone the repo (or download the ZIP from GitHub and
+   unzip it):
+
+   ```bash
+   git clone git@github.com:Acts2Network/sabbath-reminder.git
+   ```
+
+2. Open `chrome://extensions` in Chrome.
+3. Turn on **Developer mode** (toggle, top-right).
+4. Click **Load unpacked** and select the `sabbath-reminder` folder (the one
+   containing `manifest.json`).
+5. Open [Gmail](https://mail.google.com). If you're not already on it, reload
+   the tab so the extension loads.
+
+The reminder appears when you send mail on a **Monday** from an
+**`acts2.network`** account.
+
+### Updating
+
+After pulling new changes (`git pull`), go to `chrome://extensions`, click the
+**reload** ↻ icon on the Sabbath Reminder card, then reload your Gmail tab.
+
+### Notes
+
+- Keep the unpacked folder where it is — Chrome loads the extension from that
+  path on every launch. Deleting or moving it removes the extension.
+- "Developer mode" extensions are normal for internal tools. For org-wide
+  rollout without manual steps, see the Chrome Web Store (unlisted) or Google
+  Workspace admin force-install options.
 
 ## Configuration
 
