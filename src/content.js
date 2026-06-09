@@ -272,12 +272,11 @@
       box.innerHTML = [
         '<h2 id="sr-title" class="sr-title">Today is e-sabbath</h2>',
         '<p class="sr-body">Today is Monday, our e-sabbath. Are you sure you ',
-        "want to send this email now? You can also schedule it to be sent ",
-        "tomorrow instead.</p>",
+        "want to send this email now?</p>",
         '<div class="sr-actions">',
-        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="cancel">Cancel</button>',
-        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule for tomorrow</button>',
         '  <button type="button" class="sr-btn sr-btn-primary" data-choice="send">Send anyway</button>',
+        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule for tomorrow</button>',
+        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="cancel">Cancel</button>',
         "</div>",
       ].join("");
 
