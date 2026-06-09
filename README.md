@@ -13,8 +13,7 @@ in Gmail, the extension checks two things:
 
 If both are true, sending is paused and a dialog appears:
 
-> **Today is e-sabbath**
-> Today is Monday, our e-sabbath. Are you sure you want to send this email now?
+![Sabbath Reminder modal](docs/screenshot.png)
 
 You can choose:
 
