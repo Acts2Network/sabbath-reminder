@@ -13,8 +13,8 @@ in Gmail on a **Monday** (the e-sabbath), sending is paused and a dialog appears
 You can choose:
 
 - **Send anyway** — sends the email immediately.
-- **Schedule send** — pick any date and time (defaults to tomorrow at 8:00 AM
-  local), then uses Gmail's built-in *Schedule send* to deliver it then.
+- **Schedule send** — opens Gmail's built-in *Schedule send* date & time picker
+  so you can choose when to send.
 - **Cancel** — does nothing; the email stays in the compose window.
 
 On any other day the extension stays completely out of the way. It applies to
@@ -57,11 +57,9 @@ After pulling new changes (`git pull`), go to `chrome://extensions`, click the
 
 The defaults live at the top of [`src/content.js`](src/content.js):
 
-| Constant          | Default          | Meaning                                  |
-| ----------------- | ---------------- | ---------------------------------------- |
-| `SABBATH_DAY`     | `1` (Monday)     | Day of week for the e-sabbath (0 = Sun). |
-| `SCHEDULE_HOUR`   | `8`              | Default hour pre-filled in the picker.   |
-| `SCHEDULE_MINUTE` | `0`              | Default minute pre-filled in the picker. |
+| Constant      | Default      | Meaning                                  |
+| ------------- | ------------ | ---------------------------------------- |
+| `SABBATH_DAY` | `1` (Monday) | Day of week for the e-sabbath (0 = Sun). |
 
 ## Files
 
@@ -74,11 +72,9 @@ icons/             # extension icons
 
 ## Notes & limitations
 
-- The **Schedule send** option drives Gmail's native *Schedule send* dialog
-  through the DOM. Keeping the default (tomorrow at 8:00 AM) clicks Gmail's
-  *Tomorrow morning* preset; any other time is typed into Gmail's custom date &
-  time picker. Gmail's markup changes frequently; if auto-scheduling fails, the
-  extension leaves the scheduling dialog open and shows a toast so you can pick a
-  time manually.
+- The **Schedule send** option opens Gmail's native *Schedule send* dialog and
+  surfaces its date & time picker through the DOM; you choose the time there.
+  Gmail's markup changes frequently — if the picker can't be opened, use the
+  Send button's own dropdown ▸ *Schedule send*.
 - The reminder fires for **every** Gmail account in the browser. Install it only
   where the e-sabbath reminder is wanted.

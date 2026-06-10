@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Sabbath Reminder",
   "version": "1.0.0",
-  "description": "Reminds you that Monday is e-sabbath before sending Gmail, with the option to schedule send for any date and time.",
+  "description": "Reminds you that Monday is e-sabbath before sending Gmail, with the option to open Gmail's Schedule send picker.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

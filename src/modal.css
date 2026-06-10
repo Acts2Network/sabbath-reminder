@@ -37,41 +37,6 @@
   color: #3c4043;
 }
 
-.sr-field {
-  display: block;
-  margin: 0 0 24px;
-}
-
-.sr-field.sr-hidden {
-  display: none;
-}
-
-.sr-field-label {
-  display: block;
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #3c4043;
-}
-
-.sr-datetime {
-  width: 100%;
-  box-sizing: border-box;
-  font-family: inherit;
-  font-size: 14px;
-  color: #202124;
-  padding: 10px 12px;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.sr-datetime:focus {
-  outline: none;
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 1px #1a73e8;
-}
-
 .sr-actions {
   display: flex;
   flex-wrap: nowrap;

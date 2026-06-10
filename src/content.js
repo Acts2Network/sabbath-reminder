@@ -7,7 +7,7 @@
  *   - Intercepts the Gmail "Send" action (button click and Ctrl/Cmd+Enter).
  *   - Shows a modal offering three choices:
  *       1. Send anyway
- *       2. Schedule for tomorrow (drives Gmail's native "Schedule send")
+ *       2. Schedule send (opens Gmail's native date & time picker)
  *       3. Cancel
  */
 (function () {
@@ -17,9 +17,6 @@
 
   // 0 = Sunday, 1 = Monday, ... 6 = Saturday.
   const SABBATH_DAY = 1; // Monday
-  // When scheduling for "the next day", send at this local time.
-  const SCHEDULE_HOUR = 8; // 8 AM
-  const SCHEDULE_MINUTE = 0;
 
   // ----- Small utilities -----------------------------------------------------
 
@@ -93,18 +90,6 @@
   }
 
   // ----- "Schedule send" automation -----------------------------------------
-
-  function setNativeInputValue(input, value) {
-    const proto = Object.getPrototypeOf(input);
-    const desc = Object.getOwnPropertyDescriptor(proto, "value");
-    if (desc && desc.set) {
-      desc.set.call(input, value);
-    } else {
-      input.value = value;
-    }
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  }
 
   function findMoreSendOptions(sendBtn) {
     // The dropdown arrow is normally a sibling of the Send button.
@@ -182,34 +167,15 @@
     return null;
   }
 
-  function nextDayAtScheduleTime() {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(SCHEDULE_HOUR, SCHEDULE_MINUTE, 0, 0);
-    return d;
-  }
-
-  /** Does the target fall on tomorrow at the default schedule time? */
-  function isDefaultTomorrowMorning(target) {
-    const d = nextDayAtScheduleTime();
-    return (
-      target.getFullYear() === d.getFullYear() &&
-      target.getMonth() === d.getMonth() &&
-      target.getDate() === d.getDate() &&
-      target.getHours() === d.getHours() &&
-      target.getMinutes() === d.getMinutes()
-    );
-  }
-
   /**
-   * Drive Gmail's native "Schedule send" dialog to schedule for a given time.
-   * This depends on Gmail's DOM and is best-effort: if any step fails we leave
-   * the scheduling dialog open so the user can finish manually.
+   * Open Gmail's native scheduler and surface its custom date & time picker,
+   * then hand control to the user. We deliberately do NOT fill or confirm any
+   * fields — the user chooses the date and time in Gmail's own dialog. This
+   * depends on Gmail's DOM and is best-effort: if a step can't be found we
+   * stop and leave whatever opened in place.
    */
-  async function scheduleAt(sendBtn, target) {
-    // The compose window is itself a [role="dialog"]. Capture it so we never
-    // mistake it for the schedule picker and type the date/time into its
-    // To/Subject fields.
+  async function openGmailSchedulePicker(sendBtn) {
+    // The compose window is itself a [role="dialog"]; never treat it as a menu.
     const composeDialog = sendBtn.closest('[role="dialog"]') || null;
 
     const arrow = findMoreSendOptions(sendBtn);
@@ -254,118 +220,27 @@
       { label: "new picker dialog" }
     );
 
-    // Preferred path: when the user kept the default (tomorrow at 8:00 AM),
-    // click Gmail's built-in "Tomorrow morning" preset. This avoids typing into
-    // date/time fields entirely — the source of the bug where text leaked into
-    // the compose Subject. The picker content can load a beat after the dialog
-    // appears, so poll for it.
-    if (isDefaultTomorrowMorning(target) && SCHEDULE_HOUR === 8 && SCHEDULE_MINUTE === 0) {
-      try {
-        const preset = await waitFor(
-          () =>
-            findByText(
-              '[role="menuitem"], [role="button"], [role="option"], li',
-              "tomorrow morning",
-              picker
-            ),
-          { timeout: 2500, label: "tomorrow-morning preset" }
-        );
-        realClick(preset);
-        return;
-      } catch (_) {
-        console.warn(
-          "[Sabbath Reminder] no 'tomorrow morning' preset; picker text:",
-          normalizedText(picker).slice(0, 200)
-        );
-      }
-    }
-
-    // Fallback: open Gmail's custom date & time picker.
-    const pick = findByText(
-      '[role="button"], button, span',
-      "pick date & time",
-      picker
+    // Surface Gmail's custom date & time picker so the user lands directly on
+    // it. The picker content can load a beat after the dialog appears, so poll.
+    const pick = await waitFor(
+      () =>
+        findByText('[role="button"], button, span', "pick date & time", picker),
+      { timeout: 2500, label: "pick-date-&-time entry" }
     );
-    if (pick) realClick(pick);
-
-    // Find the custom-picker dialog (again, never the compose window) by
-    // requiring it to contain BOTH an aria-labelled date and time input. If we
-    // can't positively identify them, abort and let the user finish manually
-    // rather than risk editing the email.
-    const customDialog = await waitFor(
-      () => {
-        for (const dlg of document.querySelectorAll('[role="dialog"]')) {
-          if (dlg === composeDialog) continue;
-          const hasDate = dlg.querySelector('input[aria-label*="ate" i]');
-          const hasTime = dlg.querySelector('input[aria-label*="ime" i]');
-          if (hasDate && hasTime) return dlg;
-        }
-        return null;
-      },
-      { label: "custom date/time dialog" }
-    );
-
-    const dateInput = customDialog.querySelector('input[aria-label*="ate" i]');
-    const timeInput = customDialog.querySelector('input[aria-label*="ime" i]');
-    if (!dateInput || !timeInput) {
-      throw new Error("Could not identify the date/time fields");
-    }
-
-    const dateStr = target.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    const timeStr = target.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-
-    setNativeInputValue(dateInput, dateStr);
-    setNativeInputValue(timeInput, timeStr);
-    dateInput.dispatchEvent(new Event("blur", { bubbles: true }));
-    timeInput.dispatchEvent(new Event("blur", { bubbles: true }));
-
-    const confirm = await waitFor(
-      () => {
-        for (const el of customDialog.querySelectorAll('[role="button"], button')) {
-          if (normalizedText(el).includes("schedule send")) return el;
-        }
-        return null;
-      },
-      { label: "confirm schedule-send button" }
-    );
-    realClick(confirm);
+    realClick(pick);
   }
 
   // ----- Modal ---------------------------------------------------------------
 
   let modalOpen = false;
 
-  /** Format a Date as a `datetime-local` input value (local time, minute res). */
-  function toLocalInputValue(d) {
-    const pad = (n) => String(n).padStart(2, "0");
-    return (
-      d.getFullYear() +
-      "-" +
-      pad(d.getMonth() + 1) +
-      "-" +
-      pad(d.getDate()) +
-      "T" +
-      pad(d.getHours()) +
-      ":" +
-      pad(d.getMinutes())
-    );
-  }
-
   /**
-   * Show the e-sabbath modal. Resolves with { choice, when }:
-   *   choice: "send" | "schedule" | "cancel"
-   *   when:   a Date for "schedule", else null.
+   * Show the e-sabbath modal. Resolves with the chosen action:
+   *   "send" | "schedule" | "cancel"
    */
   function showSabbathModal() {
     return new Promise((resolve) => {
-      if (modalOpen) return resolve({ choice: "cancel", when: null });
+      if (modalOpen) return resolve("cancel");
       modalOpen = true;
 
       const overlay = document.createElement("div");
@@ -377,19 +252,12 @@
       box.setAttribute("aria-modal", "true");
       box.setAttribute("aria-labelledby", "sr-title");
 
-      const now = new Date();
       box.innerHTML = [
         '<h2 id="sr-title" class="sr-title">Today is e-sabbath</h2>',
         '<p class="sr-body">Are you sure you want to send this email now?</p>',
-        '<label class="sr-field sr-hidden">',
-        '  <span class="sr-field-label">Schedule send for</span>',
-        '  <input type="datetime-local" class="sr-datetime"',
-        '    value="' + toLocalInputValue(nextDayAtScheduleTime()) + '"',
-        '    min="' + toLocalInputValue(now) + '">',
-        "</label>",
         '<div class="sr-actions">',
         '  <button type="button" class="sr-btn sr-btn-primary" data-choice="send">Send anyway</button>',
-        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule for later</button>',
+        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule send</button>',
         '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="cancel">Cancel</button>',
         "</div>",
       ].join("");
@@ -397,22 +265,11 @@
       overlay.appendChild(box);
       document.body.appendChild(overlay);
 
-      const field = box.querySelector(".sr-field");
-      const dtInput = box.querySelector(".sr-datetime");
-      const scheduleBtn = box.querySelector('[data-choice="schedule"]');
-      const sendBtn = box.querySelector('[data-choice="send"]');
-      const bodyText = box.querySelector(".sr-body");
-
       function cleanup(choice) {
         document.removeEventListener("keydown", onKey, true);
-        let when = null;
-        if (choice === "schedule" && dtInput && dtInput.value) {
-          const parsed = new Date(dtInput.value);
-          if (!isNaN(parsed.getTime())) when = parsed;
-        }
         overlay.remove();
         modalOpen = false;
-        resolve({ choice, when });
+        resolve(choice);
       }
 
       function onKey(e) {
@@ -426,17 +283,7 @@
       box.addEventListener("click", (e) => {
         const target = e.target.closest("[data-choice]");
         if (!target) return;
-        const choice = target.getAttribute("data-choice");
-        // First "Schedule send" click reveals the picker; the second confirms.
-        if (choice === "schedule" && field.classList.contains("sr-hidden")) {
-          field.classList.remove("sr-hidden");
-          scheduleBtn.textContent = "Schedule send";
-          if (sendBtn) sendBtn.remove();
-          if (bodyText) bodyText.remove();
-          if (dtInput) dtInput.focus();
-          return;
-        }
-        cleanup(choice);
+        cleanup(target.getAttribute("data-choice"));
       });
       overlay.addEventListener("click", (e) => {
         if (e.target === overlay) cleanup("cancel");
@@ -467,7 +314,7 @@
   let bypassNextSend = false;
 
   async function handleSendIntercept(sendBtn) {
-    const { choice, when } = await showSabbathModal();
+    const choice = await showSabbathModal();
 
     if (choice === "send") {
       bypassNextSend = true;
@@ -476,21 +323,14 @@
     }
 
     if (choice === "schedule") {
-      const target = when || nextDayAtScheduleTime();
       try {
-        await scheduleAt(sendBtn, target);
-        const label = target.toLocaleString(undefined, {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        });
-        showToast("Email scheduled to send " + label + ".");
+        await openGmailSchedulePicker(sendBtn);
+        showToast("Pick a date & time in Gmail's scheduler.");
       } catch (err) {
-        console.warn("[Sabbath Reminder] Auto-scheduling failed:", err);
+        console.warn("[Sabbath Reminder] Couldn't open scheduler:", err);
         showToast(
-          "Couldn't auto-schedule. Please pick a time in the dialog that opened."
+          "Couldn't open Gmail's scheduler. Use the Send dropdown's " +
+            "“Schedule send” option."
         );
       }
       return;
