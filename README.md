@@ -70,6 +70,29 @@ src/modal.css      # modal & toast styling
 icons/             # extension icons
 ```
 
+## Publishing (Chrome Web Store)
+
+Releases are automated by [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+Pushing a version tag builds the zip and publishes via the Chrome Web Store API:
+
+```bash
+# bump "version" in manifest.json first, then:
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+One-time setup — add these **repository secrets** (Settings → Secrets and
+variables → Actions):
+
+| Secret              | Where to get it                                            |
+| ------------------- | ---------------------------------------------------------- |
+| `CWS_EXTENSION_ID`  | Extension ID from the Web Store dashboard URL.             |
+| `CWS_CLIENT_ID`     | OAuth client ID (Desktop app) from Google Cloud Console.   |
+| `CWS_CLIENT_SECRET` | OAuth client secret.                                       |
+| `CWS_REFRESH_TOKEN` | Refresh token for scope `chromewebstore` (generated once). |
+
+Enable the **Chrome Web Store API** in the Cloud project first. The workflow can
+also be run manually from the **Actions** tab (`workflow_dispatch`).
+
 ## Notes & limitations
 
 - The **Schedule send** option opens Gmail's native *Schedule send* dialog and
