@@ -156,23 +156,11 @@
     return out;
   }
 
-  function findByText(selector, text, root = document) {
-    const target = text.toLowerCase();
-    for (const el of root.querySelectorAll(selector)) {
-      if (!isVisible(el)) continue; // skip hidden/stale nodes
-      if (normalizedText(el) === target || normalizedText(el).includes(target)) {
-        return el;
-      }
-    }
-    return null;
-  }
-
   /**
-   * Open Gmail's native scheduler and surface its custom date & time picker,
-   * then hand control to the user. We deliberately do NOT fill or confirm any
-   * fields — the user chooses the date and time in Gmail's own dialog. This
-   * depends on Gmail's DOM and is best-effort: if a step can't be found we
-   * stop and leave whatever opened in place.
+   * Open Gmail's native "Schedule send" dialog, then hand control to the user:
+   * they pick a preset or "Pick date & time" in Gmail's own dialog. We do not
+   * fill or confirm anything. Depends on Gmail's DOM and is best-effort — if a
+   * step can't be found we throw so the caller can surface a fallback hint.
    */
   async function openGmailSchedulePicker(sendBtn) {
     // The compose window is itself a [role="dialog"]; never treat it as a menu.
@@ -208,8 +196,10 @@
     const before = new Set(document.querySelectorAll('[role="dialog"]'));
     realClick(scheduleItem);
 
-    // Wait for the schedule picker — a dialog that did not exist before.
-    const picker = await waitFor(
+    // Wait for the schedule picker — a dialog that did not exist before — then
+    // hand control to the user. We stop here: the user picks a preset or opens
+    // "Pick date & time" themselves in Gmail's own dialog.
+    await waitFor(
       () => {
         for (const dlg of document.querySelectorAll('[role="dialog"]')) {
           if (dlg === composeDialog || before.has(dlg)) continue;
@@ -219,15 +209,6 @@
       },
       { label: "new picker dialog" }
     );
-
-    // Surface Gmail's custom date & time picker so the user lands directly on
-    // it. The picker content can load a beat after the dialog appears, so poll.
-    const pick = await waitFor(
-      () =>
-        findByText('[role="button"], button, span', "pick date & time", picker),
-      { timeout: 2500, label: "pick-date-&-time entry" }
-    );
-    realClick(pick);
   }
 
   // ----- Modal ---------------------------------------------------------------
@@ -325,7 +306,6 @@
     if (choice === "schedule") {
       try {
         await openGmailSchedulePicker(sendBtn);
-        showToast("Pick a date & time in Gmail's scheduler.");
       } catch (err) {
         console.warn("[Sabbath Reminder] Couldn't open scheduler:", err);
         showToast(
