@@ -189,12 +189,24 @@
     return d;
   }
 
+  /** Does the target fall on tomorrow at the default schedule time? */
+  function isDefaultTomorrowMorning(target) {
+    const d = nextDayAtScheduleTime();
+    return (
+      target.getFullYear() === d.getFullYear() &&
+      target.getMonth() === d.getMonth() &&
+      target.getDate() === d.getDate() &&
+      target.getHours() === d.getHours() &&
+      target.getMinutes() === d.getMinutes()
+    );
+  }
+
   /**
-   * Drive Gmail's native "Schedule send" dialog to schedule for tomorrow.
+   * Drive Gmail's native "Schedule send" dialog to schedule for a given time.
    * This depends on Gmail's DOM and is best-effort: if any step fails we leave
    * the scheduling dialog open so the user can finish manually.
    */
-  async function scheduleForNextDay(sendBtn) {
+  async function scheduleAt(sendBtn, target) {
     // The compose window is itself a [role="dialog"]. Capture it so we never
     // mistake it for the schedule picker and type the date/time into its
     // To/Subject fields.
@@ -242,12 +254,12 @@
       { label: "new picker dialog" }
     );
 
-    // Preferred path: click Gmail's built-in "Tomorrow morning" preset, which
-    // schedules tomorrow at 8:00 AM and matches the default schedule time. This
-    // avoids typing into date/time fields entirely — the source of the bug
-    // where text leaked into the compose Subject. The picker content can load
-    // a beat after the dialog appears, so poll for it.
-    if (SCHEDULE_HOUR === 8 && SCHEDULE_MINUTE === 0) {
+    // Preferred path: when the user kept the default (tomorrow at 8:00 AM),
+    // click Gmail's built-in "Tomorrow morning" preset. This avoids typing into
+    // date/time fields entirely — the source of the bug where text leaked into
+    // the compose Subject. The picker content can load a beat after the dialog
+    // appears, so poll for it.
+    if (isDefaultTomorrowMorning(target) && SCHEDULE_HOUR === 8 && SCHEDULE_MINUTE === 0) {
       try {
         const preset = await waitFor(
           () =>
@@ -299,7 +311,6 @@
       throw new Error("Could not identify the date/time fields");
     }
 
-    const target = nextDayAtScheduleTime();
     const dateStr = target.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
@@ -331,9 +342,30 @@
 
   let modalOpen = false;
 
+  /** Format a Date as a `datetime-local` input value (local time, minute res). */
+  function toLocalInputValue(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      "T" +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  }
+
+  /**
+   * Show the e-sabbath modal. Resolves with { choice, when }:
+   *   choice: "send" | "schedule" | "cancel"
+   *   when:   a Date for "schedule", else null.
+   */
   function showSabbathModal() {
     return new Promise((resolve) => {
-      if (modalOpen) return resolve("cancel");
+      if (modalOpen) return resolve({ choice: "cancel", when: null });
       modalOpen = true;
 
       const overlay = document.createElement("div");
@@ -345,13 +377,19 @@
       box.setAttribute("aria-modal", "true");
       box.setAttribute("aria-labelledby", "sr-title");
 
+      const now = new Date();
       box.innerHTML = [
         '<h2 id="sr-title" class="sr-title">Today is e-sabbath</h2>',
-        '<p class="sr-body">Today is Monday, our e-sabbath. Are you sure you ',
-        "want to send this email now?</p>",
+        '<p class="sr-body">Are you sure you want to send this email now?</p>',
+        '<label class="sr-field sr-hidden">',
+        '  <span class="sr-field-label">Schedule send for</span>',
+        '  <input type="datetime-local" class="sr-datetime"',
+        '    value="' + toLocalInputValue(nextDayAtScheduleTime()) + '"',
+        '    min="' + toLocalInputValue(now) + '">',
+        "</label>",
         '<div class="sr-actions">',
         '  <button type="button" class="sr-btn sr-btn-primary" data-choice="send">Send anyway</button>',
-        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule for tomorrow</button>',
+        '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="schedule">Schedule for later</button>',
         '  <button type="button" class="sr-btn sr-btn-secondary" data-choice="cancel">Cancel</button>',
         "</div>",
       ].join("");
@@ -359,11 +397,22 @@
       overlay.appendChild(box);
       document.body.appendChild(overlay);
 
+      const field = box.querySelector(".sr-field");
+      const dtInput = box.querySelector(".sr-datetime");
+      const scheduleBtn = box.querySelector('[data-choice="schedule"]');
+      const sendBtn = box.querySelector('[data-choice="send"]');
+      const bodyText = box.querySelector(".sr-body");
+
       function cleanup(choice) {
         document.removeEventListener("keydown", onKey, true);
+        let when = null;
+        if (choice === "schedule" && dtInput && dtInput.value) {
+          const parsed = new Date(dtInput.value);
+          if (!isNaN(parsed.getTime())) when = parsed;
+        }
         overlay.remove();
         modalOpen = false;
-        resolve(choice);
+        resolve({ choice, when });
       }
 
       function onKey(e) {
@@ -377,7 +426,17 @@
       box.addEventListener("click", (e) => {
         const target = e.target.closest("[data-choice]");
         if (!target) return;
-        cleanup(target.getAttribute("data-choice"));
+        const choice = target.getAttribute("data-choice");
+        // First "Schedule send" click reveals the picker; the second confirms.
+        if (choice === "schedule" && field.classList.contains("sr-hidden")) {
+          field.classList.remove("sr-hidden");
+          scheduleBtn.textContent = "Schedule send";
+          if (sendBtn) sendBtn.remove();
+          if (bodyText) bodyText.remove();
+          if (dtInput) dtInput.focus();
+          return;
+        }
+        cleanup(choice);
       });
       overlay.addEventListener("click", (e) => {
         if (e.target === overlay) cleanup("cancel");
@@ -408,7 +467,7 @@
   let bypassNextSend = false;
 
   async function handleSendIntercept(sendBtn) {
-    const choice = await showSabbathModal();
+    const { choice, when } = await showSabbathModal();
 
     if (choice === "send") {
       bypassNextSend = true;
@@ -417,9 +476,17 @@
     }
 
     if (choice === "schedule") {
+      const target = when || nextDayAtScheduleTime();
       try {
-        await scheduleForNextDay(sendBtn);
-        showToast("Email scheduled to send tomorrow morning.");
+        await scheduleAt(sendBtn, target);
+        const label = target.toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+        showToast("Email scheduled to send " + label + ".");
       } catch (err) {
         console.warn("[Sabbath Reminder] Auto-scheduling failed:", err);
         showToast(
