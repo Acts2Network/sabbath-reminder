@@ -8,7 +8,7 @@ an email in Gmail.
 When you click **Send** (or press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>Enter</kbd>)
 in Gmail on a **Monday** (the e-sabbath), sending is paused and a dialog appears:
 
-![Sabbath Reminder modal](docs/screenshot.png)
+![Sabbath Reminder modal](docs/screenshot-v2.png)
 
 You can choose:
 
